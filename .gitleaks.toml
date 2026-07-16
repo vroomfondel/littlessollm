@@ -1,8 +1,13 @@
 [extend]
   useDefault = true
 
+# Mirrors the git-crypt patterns in .gitattributes: everything encrypted there
+# is cleartext in the working tree, so `gitleaks --no-git` would flag it.
 [allowlist]
   paths = [
-    '''vault\.yml''',
-    '''\.mypy_cache'''
+    '''(^|/)vault\.yml$''',
+    '''(^|/)vault/''',
+    '''\.local$''',
+    '''\.local\.[^/]+$''',
+    '''(^|/)\.mypy_cache/'''
   ]

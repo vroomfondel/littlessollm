@@ -1,0 +1,115 @@
+# k8s-idp-auth.yaml
+# ConfigMap  = nicht-geheimes Mapping (Datei-Volume)
+# Secret     = ALLE Geheimnisse als EINZELNE DATEIEN (kein secret-Env mehr)
+# littlessollm-entrypoint materialisiert die von litellm selbst gelesenen
+# Secrets (MASTER_KEY/DATABASE_URL/SALT_KEY) erst kurz vor dem Start in die
+# Kind-Env.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-idp-mapping
+data:
+  idp-mapping.yaml: |
+    oidc:
+      discovery_url: https://idp.example.com/realms/acme/.well-known/openid-configuration
+      issuer: https://idp.example.com/realms/acme
+      jwks_url: https://idp.example.com/realms/acme/protocol/openid-connect/certs
+      audience: littlessollm-api
+      algorithms: [RS256]
+      scope: [openid, email, profile, groups]
+      group_claim: groups
+      sub_claim: sub
+      redirect_uri: https://llm.example.com/my-sso/callback
+      client_id: litellm-ui
+      allowed_email_domain: example.com
+    ui_sso:
+      role_map:
+        proxy_admin: [litellm-admins, platform-team]
+        internal_user: [engineers, data-science]
+      default_role: internal_user_viewer
+    api_auth:
+      default_team_id: team-default
+      default_role: internal_user
+      team_map:
+        team-eng: [engineers, backend]
+        team-data: [data-science]
+      models_by_team:
+        team-eng: [gpt-4o, claude-3-5-sonnet]
+        team-data: [gpt-4o-mini, claude-3-5-haiku]
+      limits_by_team:
+        team-eng: {tpm_limit: 200000, rpm_limit: 2000, max_budget: 500, budget_duration: 30d}
+      cache: {skew_seconds: 30, key_grace_seconds: 60, min_key_seconds: 60}
+      public_prefixes: [/health, /my-sso, /sso, /ui, /docs, /openapi.json, /get_image, /favicon, /.well-known]
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: litellm-idp-secrets
+type: Opaque
+stringData:
+  # jeder Key -> eine Datei /etc/litellm-secrets/<key>
+  OIDC_CLIENT_SECRET: "REPLACE_ME"      # von littlessollm.sso gelesen
+  REDIS_URL: "redis://litellm-redis:6379/0"
+  LITELLM_MASTER_KEY: "sk-REPLACE_ME"   # von litellm selbst gelesen -> via entrypoint
+  DATABASE_URL: "postgresql://user:pass@litellm-db:5432/litellm"
+  LITELLM_SALT_KEY: "sk-salt-REPLACE_ME"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: litellm}
+  template:
+    metadata:
+      labels: {app: litellm}
+    spec:
+      securityContext:            # damit 0440 root:fsGroup-Dateien lesbar sind
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: litellm
+          image: ghcr.io/vroomfondel/littlessollm:latest
+          # littlessollm-entrypoint laedt *_FILE-Secrets in die Env und exec't dann uvicorn:
+          command: ["littlessollm-entrypoint", "uvicorn", "littlessollm.asgi:app", "--host", "0.0.0.0", "--port", "4000"]
+          ports: [{containerPort: 4000}]
+          env:
+            - name: IDP_MAPPING_CONFIG
+              value: /etc/litellm/idp-mapping.yaml
+            - name: LITELLM_CONFIG
+              value: /app/config.yaml
+            # KEIN Secret-Wert in Env - nur Pfade (*_FILE):
+            - name: OIDC_CLIENT_SECRET_FILE
+              value: /etc/litellm-secrets/OIDC_CLIENT_SECRET
+            - name: REDIS_URL_FILE
+              value: /etc/litellm-secrets/REDIS_URL
+            - name: LITELLM_MASTER_KEY_FILE
+              value: /etc/litellm-secrets/LITELLM_MASTER_KEY
+            - name: DATABASE_URL_FILE
+              value: /etc/litellm-secrets/DATABASE_URL
+            - name: LITELLM_SALT_KEY_FILE
+              value: /etc/litellm-secrets/LITELLM_SALT_KEY
+            # optional: hart fehlschlagen, wenn eines fehlt (statt still auf Env-Default):
+            - name: REQUIRE_SECRETS
+              value: "LITELLM_MASTER_KEY,DATABASE_URL"
+          volumeMounts:
+            - {name: idp-mapping, mountPath: /etc/litellm, readOnly: true}
+            - {name: idp-secrets, mountPath: /etc/litellm-secrets, readOnly: true}
+      volumes:
+        - name: idp-mapping
+          configMap: {name: litellm-idp-mapping}
+        - name: idp-secrets
+          secret:
+            secretName: litellm-idp-secrets
+            defaultMode: 0440
+            items:
+              - {key: OIDC_CLIENT_SECRET, path: OIDC_CLIENT_SECRET}
+              - {key: REDIS_URL, path: REDIS_URL}
+              - {key: LITELLM_MASTER_KEY, path: LITELLM_MASTER_KEY}
+              - {key: DATABASE_URL, path: DATABASE_URL}
+              - {key: LITELLM_SALT_KEY, path: LITELLM_SALT_KEY}

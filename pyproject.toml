@@ -1,0 +1,126 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "littlessollm"
+dynamic = ["version"]
+description = "littlessollm — a little SSO for LiteLLM: minimal, MIT-only, config-driven OIDC UI-SSO + API-JWT auth add-on (no litellm_enterprise import)"
+requires-python = ">=3.13"
+readme = "README_pypi.md"
+authors = [
+  { name="Henning Thieß", email="ht@xomox.cc" },
+]
+license-files = ["LICENSE.md"]
+keywords = ["litellm", "oidc", "sso", "jwt", "auth", "llm-gateway", "llm-proxy", "fastapi", "kubernetes"]
+
+# https://pypi.org/classifiers/
+classifiers = [
+    "Development Status :: 3 - Alpha",
+
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+
+    "Framework :: FastAPI",
+
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+]
+
+dependencies = [
+    # --- Web / ASGI (mounts onto litellm's own FastAPI app) ---
+    "fastapi>=0.115",
+    "starlette>=0.38",
+    "httpx>=0.28",
+
+    # --- OIDC / JWT ---
+    "fastapi-sso>=0.16",          # generic OIDC provider for the UI-SSO router
+    "pyjwt[crypto]>=2.8",         # JWKS validation for the API-auth middleware
+
+    # --- Config / secrets ---
+    "PyYAML>=6.0",                # idp-mapping.yaml + aggregated secrets file
+]
+
+[project.optional-dependencies]
+# Only needed if REDIS_URL is set (shared virtual-key cache across replicas);
+# without it, littlessollm.auth falls back to an in-memory per-process cache.
+redis = [
+    "redis>=5.0",
+]
+dev = [
+    "ruff>=0.7",                 # lint + format (import sort, style)
+    "mypy>=1.15",
+    "types-PyYAML>=6.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+littlessollm-entrypoint = "littlessollm.entrypoint:main"
+
+[project.urls]
+Homepage = "https://github.com/vroomfondel/littlessollm"
+Repository = "https://github.com/vroomfondel/littlessollm"
+Issues = "https://github.com/vroomfondel/littlessollm/issues"
+
+# Version is read from littlessollm/__init__.py (__version__).
+[tool.hatch.version]
+path = "littlessollm/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["littlessollm"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"   # ruff syntax target; runtime requires 3.14
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.pytest.ini_options]
+python_files = "tests/*.py"
+asyncio_mode = "auto"
+
+[tool.mypy]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+exclude = '''(?x)(
+    \.venv
+    | venv
+    | \.pyi$
+    )'''
+
+[[tool.mypy.overrides]]
+# litellm itself ships no type stubs (and isn't a direct dependency -- it's
+# only imported lazily, at call time, inside functions that run in the
+# target litellm-database image). redis-py has no py.typed marker either.
+# fastapi_sso DOES ship its own py.typed stubs, so it's intentionally NOT
+# listed here. cv2/numpy/pytesseract are for repo_scripts/blurimage.py (OCR
+# redaction helper, unrelated standalone tool shipped alongside this
+# package). github (PyGithub) is for repo_scripts/update_badge.py (clone-count
+# badge updater, used only by .github/workflows/update-clone-badge.yml).
+module = [
+    "litellm", "litellm.*",
+    "redis", "redis.*",
+    "github",
+    "cv2", "numpy", "pytesseract",
+]
+ignore_missing_imports = true

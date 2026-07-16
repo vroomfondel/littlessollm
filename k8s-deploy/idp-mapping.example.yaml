@@ -1,0 +1,64 @@
+# idp-mapping.example.yaml — nicht-geheimes IdP-Mapping (Kubernetes ConfigMap).
+# Secrets (OIDC_CLIENT_SECRET, REDIS_URL, LITELLM_MASTER_KEY, ...) NICHT
+# hierher, sondern ins Secret (siehe k8s-idp-auth.yaml). Aenderungen an dieser
+# Datei werden dank mtime-Reload ohne Pod-Restart uebernommen (nach
+# kubelet-Sync des ConfigMap-Volumes).
+#
+# Kopiere diese Datei nach idp-mapping.yaml (oder direkt in eine ConfigMap,
+# siehe k8s-idp-auth.yaml) und ersetze die Beispielwerte durch deine echten
+# IdP-Endpunkte und dein Team/Rollen-Mapping.
+
+oidc:
+  discovery_url: https://idp.example.com/realms/acme/.well-known/openid-configuration
+  # Fuer API-Auth: explizit, damit die Middleware nicht bei jedem Start Discovery
+  # fetchen muss. Werte stammen aus dem Discovery-Dokument.
+  issuer: https://idp.example.com/realms/acme
+  jwks_url: https://idp.example.com/realms/acme/protocol/openid-connect/certs
+  audience: littlessollm-api        # aud, das deine Clients im Token tragen
+  algorithms: [RS256]
+  scope: [openid, email, profile, groups]
+  group_claim: groups
+  sub_claim: sub
+  redirect_uri: https://llm.example.com/my-sso/callback
+  client_id: litellm-ui               # nicht geheim; Env-/Datei-Fallback: OIDC_CLIENT_ID
+  allowed_email_domain: example.com   # optional; leer lassen zum Deaktivieren
+
+# --- Admin-UI-Login: Gruppe -> LiteLLM-Rolle (erste Uebereinstimmung gewinnt) ---
+ui_sso:
+  role_map:
+    proxy_admin: [litellm-admins, platform-team]
+    internal_user: [engineers, data-science]
+  default_role: internal_user_viewer
+
+# --- API-Auth: Gruppe -> Team/Models/Rolle/Limits ---
+api_auth:
+  default_team_id: team-default
+  default_role: internal_user
+
+  team_map:                      # Gruppe -> team_id
+    team-eng: [engineers, backend]
+    team-data: [data-science]
+
+  models_by_team:                # team_id -> erlaubte Modelle (leer = alle)
+    team-eng: [gpt-4o, claude-3-5-sonnet]
+    team-data: [gpt-4o-mini, claude-3-5-haiku]
+
+  limits_by_team:                # team_id -> Limits/Budget
+    team-eng:
+      tpm_limit: 200000
+      rpm_limit: 2000
+      max_budget: 500
+      budget_duration: 30d
+    team-data:
+      tpm_limit: 50000
+      rpm_limit: 500
+      max_budget: 100
+      budget_duration: 30d
+
+  cache:
+    skew_seconds: 30             # Cache-TTL = token_remaining - skew
+    key_grace_seconds: 60        # Key-duration = token_remaining + grace
+    min_key_seconds: 60
+
+  public_prefixes:
+    [/health, /my-sso, /sso, /ui, /docs, /openapi.json, /get_image, /favicon, /.well-known]
