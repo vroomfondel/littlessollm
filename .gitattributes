@@ -1,0 +1,6 @@
+/**/vault.yml filter=git-crypt diff=git-crypt
+/**/vault/** filter=git-crypt diff=git-crypt
+
+# failsafe for .local files...
+*.local.* filter=git-crypt diff=git-crypt
+*.local filter=git-crypt diff=git-crypt

@@ -1,0 +1,33 @@
+/CLAUDE.md
+
+*.local
+*.local.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Virtual Environment
+.venv/
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets — NIEMALS committen
+*.pem
+*.key
+.env
+.env.*
+!.env.example

@@ -1,0 +1,83 @@
+name: BuildAndPushMultiarch
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["lintnmypyntests"]
+    branches: ["main"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # https://github.com/docker/setup-qemu-action
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # https://github.com/docker/setup-buildx-action
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: get some runtime info
+        run: |
+          echo PWD: $(pwd)
+          echo GH-REF: ${{ github.ref }}
+          echo GH-SHA: ${{ github.sha }}
+          tree
+
+      # Images go to ghcr.io (GitHub Container Registry); the built-in
+      # GITHUB_TOKEN (permissions: packages: write, set above) is enough --
+      # no registry secret needed. See repo_scripts/initial_setup_github.sh.
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Same discovery logic (and rationale) as repo_scripts/build-container-multiarch.sh
+      # uses locally -- kept in one shared script so CI and local builds can
+      # never drift onto different litellm versions.
+      - name: Discover current litellm-database -stable tag
+        id: litellm_version
+        run: |
+          set -euo pipefail
+          VERSION="$(repo_scripts/discover_litellm_version.sh)"
+          echo "Discovered LITELLM_VERSION=${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set build variables
+        id: build_vars
+        run: |
+          LITELLM_VERSION="${{ steps.litellm_version.outputs.version }}"
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          TAGS="ghcr.io/${OWNER_LOWER}/littlessollm:litellm-${LITELLM_VERSION#main-},ghcr.io/${OWNER_LOWER}/littlessollm:latest"
+
+          echo "litellm_version=${LITELLM_VERSION}" >> $GITHUB_OUTPUT
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "buildtime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.build_vars.outputs.tags }}
+          build-args: |
+            LITELLM_VERSION=${{ steps.build_vars.outputs.litellm_version }}
+            BUILDTIME=${{ steps.build_vars.outputs.buildtime }}
+            GH_REF=${{ github.ref }}
+            GH_SHA=${{ github.sha }}

@@ -1,0 +1,29 @@
+# Secrets / local overrides (never ship these in the build context)
+**/*.local
+**/*.local.*
+.env
+.env.*
+docker-config/
+
+# Python caches / build artifacts
+**/__pycache__
+**/*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# VCS / IDE
+.git/
+.gitignore
+.idea/
+.github/
+
+# Repo tooling + docs not needed inside the image
+repo_scripts/
+k8s-deploy/
+tests/
+CLAUDE.md
