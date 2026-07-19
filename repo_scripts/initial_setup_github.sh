@@ -84,12 +84,18 @@ if [[ -z "${GIST_ID:-}" ]]; then
   else
     HIST_FILE="/tmp/${REPO_SHORT}_clone_history.json"
     BADGE_FILE="/tmp/${REPO_SHORT}_clone_count.json"
+    GHCR_BADGE_FILE="/tmp/${REPO_SHORT}_ghcr_downloads.json"
     echo '{}' > "$HIST_FILE"
-    echo '{}' > "$BADGE_FILE"
+    # Badge-Dateien mit gültigem shields.io-Endpoint-Schema seeden, damit die
+    # Badges zwischen Gist-Anlage und erstem update_badge.py-Lauf nicht
+    # "invalid response" zeigen. update_badge.py überschreibt sie danach.
+    echo '{"schemaVersion":1,"label":"Clones","message":"n/a","color":"lightgrey","namedLogo":"github","logoColor":"white"}' > "$BADGE_FILE"
+    echo '{"schemaVersion":1,"label":"ghcr.io pulls","message":"n/a","color":"lightgrey","namedLogo":"github","logoColor":"white"}' > "$GHCR_BADGE_FILE"
 
-    GIST_URL=$(GH_TOKEN="$GIST_TOKEN" gh gist create --public --desc "$GIST_DESC" "$HIST_FILE" "$BADGE_FILE")
+    GIST_URL=$(GH_TOKEN="$GIST_TOKEN" gh gist create --public --desc "$GIST_DESC" \
+      "$HIST_FILE" "$BADGE_FILE" "$GHCR_BADGE_FILE")
     GIST_ID="${GIST_URL##*/}"
-    rm -f "$HIST_FILE" "$BADGE_FILE"
+    rm -f "$HIST_FILE" "$BADGE_FILE" "$GHCR_BADGE_FILE"
 
     if [[ -n "$GIST_ID" ]]; then
       ok "Gist erstellt: $GIST_URL (ID: $GIST_ID)"

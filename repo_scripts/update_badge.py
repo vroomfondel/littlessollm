@@ -23,6 +23,31 @@ install_and_import(packagename="github", pipname="pygithub")
 from github import Auth, Clones, Github, InputFileContent, RateLimitOverview  # noqa: E402
 
 
+def fetch_ghcr_downloads(owner: str, package: str) -> int | None:
+    """Scrape the total download count off the public GHCR package page.
+
+    GitHub exposes no API for container pull counts, but the package page
+    renders it as <h3 title="1234">. Returns None if the page shape changed.
+    """
+    import re
+    import urllib.request
+
+    url = f"https://github.com/{owner}/{package}/pkgs/container/{package}"
+    req = urllib.request.Request(url, headers={"User-Agent": "update_badge.py"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            html = resp.read().decode("utf-8", "replace")
+    except Exception as e:
+        print(f"Error fetching GHCR page: {e}")
+        return None
+
+    m = re.search(r"Total downloads</span>\s*<h3 title=\"([\d,]+)\"", html)
+    if not m:
+        print("Could not parse download count from GHCR page — layout changed?")
+        return None
+    return int(m.group(1).replace(",", ""))
+
+
 def _load_include_local() -> None:
     """Load VAR="value" assignments from include.local.sh next to this script."""
     path = Path(__file__).parent / "include.local.sh"
@@ -51,6 +76,7 @@ def main() -> None:
 
     history_filename = "littlessollm_clone_history.json"
     badge_filename = "littlessollm_clone_count.json"
+    ghcr_badge_filename = "littlessollm_ghcr_downloads.json"
 
     # --- 1. CONNECT ---
     # Gist instance (write access via PAT)
@@ -104,13 +130,34 @@ def main() -> None:
         "logoColor": "white",
     }
 
+    files: dict[str, InputFileContent | None] = {
+        history_filename: InputFileContent(json.dumps(history, indent=2)),
+        badge_filename: InputFileContent(json.dumps(badge_data)),
+    }
+
+    # --- 5b. GHCR DOWNLOAD COUNT ---
+    # Keep the previous value on a failed scrape rather than writing a broken badge.
+    owner, _, package = repo_name.partition("/")
+    ghcr_downloads = fetch_ghcr_downloads(owner, package)
+    if ghcr_downloads is None:
+        print("Skipping GHCR badge update (keeping previous value).")
+    else:
+        print(f"GHCR total downloads: {ghcr_downloads}")
+        files[ghcr_badge_filename] = InputFileContent(
+            json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "label": "ghcr.io pulls",
+                    "message": str(ghcr_downloads),
+                    "color": "blue",
+                    "namedLogo": "github",
+                    "logoColor": "white",
+                }
+            )
+        )
+
     # --- 6. PUSH THE UPDATE ---
-    gist.edit(
-        files={
-            history_filename: InputFileContent(json.dumps(history, indent=2)),
-            badge_filename: InputFileContent(json.dumps(badge_data)),
-        }
-    )
+    gist.edit(files=files)
     print("Gist updated successfully!")
 
 

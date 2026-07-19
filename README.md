@@ -1,3 +1,11 @@
+[![lint, mypy and pytests](https://github.com/vroomfondel/littlessollm/actions/workflows/lintnmypyntests.yml/badge.svg)](https://github.com/vroomfondel/littlessollm/actions/workflows/lintnmypyntests.yml)
+[![BuildAndPushMultiarch](https://github.com/vroomfondel/littlessollm/actions/workflows/buildmultiarchandpush.yml/badge.svg)](https://github.com/vroomfondel/littlessollm/actions/workflows/buildmultiarchandpush.yml)
+![Cumulative Clones](https://img.shields.io/endpoint?logo=github&url=https://gist.githubusercontent.com/vroomfondel/3e86b516eec8f9a2c76cb977a84a9740/raw/littlessollm_clone_count.json)
+[![GHCR Pulls](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/vroomfondel/3e86b516eec8f9a2c76cb977a84a9740/raw/littlessollm_ghcr_downloads.json)](https://github.com/vroomfondel/littlessollm/pkgs/container/littlessollm)
+[![GHCR latest tag](https://ghcr-badge.egpl.dev/vroomfondel/littlessollm/latest_tag?label=ghcr.io&color=blue)](https://github.com/vroomfondel/littlessollm/pkgs/container/littlessollm)
+[![GHCR image size](https://ghcr-badge.egpl.dev/vroomfondel/littlessollm/size?tag=latest&label=image%20size&color=blue)](https://github.com/vroomfondel/littlessollm/pkgs/container/littlessollm)
+
+
 # littlessollm — a little SSO (+ API auth) for LiteLLM
 
 WIP - not tested at all yet.
